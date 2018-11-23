@@ -1008,12 +1008,14 @@ func (*defaultClock) Nanos() int64 {
 func (c *Consumer) signRequest(req *request, tokenSecret string) (*request, error) {
 	baseString := c.requestString(req.method, req.url, req.oauthParams)
 
+	//baseString = "GET&http%3A%2F%2Fwww.fatsecret.com%2Foauth%2Frequest_token&oauth_callback%3Doob%26oauth_consumer_key%3D784f2cf66ade4eea84379f35eeae84ab%26oauth_nonce%3D2e02fe4bb07a0dd3011f5d4c5ee66c45acc870b0%26oauth_signature_method%3DHMAC-SHA1%26oauth_timestamp%3D1542997873%26oauth_version%3D1.0"
 	signature, err := c.signer.Sign(baseString, tokenSecret)
 	if err != nil {
 		return nil, err
 	}
 
-	req.oauthParams.Add(SIGNATURE_PARAM, signature)
+	//req.oauthParams.Add(SIGNATURE_PARAM, signature)
+	req.oauthParams.AddUnescaped(SIGNATURE_PARAM, signature)
 	return req, nil
 }
 
@@ -1075,9 +1077,7 @@ func (c *Consumer) baseParams(consumerKey string, additionalParams map[string]st
 	params.Add(VERSION_PARAM, OAUTH_VERSION)
 	params.Add(SIGNATURE_METHOD_PARAM, c.signer.SignatureMethod())
 	params.Add(TIMESTAMP_PARAM, strconv.FormatInt(c.clock.Seconds(), 10))
-	//params.Add(TIMESTAMP_PARAM, "1542935636")
-	//params.Add(NONCE_PARAM, strconv.FormatInt(c.nonceGenerator.Int63(), 10))
-	params.Add(NONCE_PARAM, "83be42b3c1653fd635dbbae96eb966a7")
+	params.Add(NONCE_PARAM, strconv.FormatInt(c.nonceGenerator.Int63(), 10))
 	params.Add(CONSUMER_KEY_PARAM, consumerKey)
 	for key, value := range additionalParams {
 		params.Add(key, value)
@@ -1300,7 +1300,15 @@ func (c *Consumer) httpExecute(
 		for _, key := range oauthParams.Keys() {
 			fmt.Println(key)
 			for _, value := range oauthParams.Get(key) {
-				q.Add(key, value)
+
+				// these parameters were already encoded earlier to generate the signature base string, so
+				// decode them first.
+				decodedValue, err := url.QueryUnescape(value)
+				if err != nil {
+					panic(err)
+				}
+
+				q.Add(key, decodedValue)
 			}
 		}
 		req.URL.RawQuery = q.Encode()

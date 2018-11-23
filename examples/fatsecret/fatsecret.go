@@ -4,7 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"github.com/mrjones/oauth"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 )
 
@@ -41,16 +43,10 @@ func main() {
 	c := oauth.NewConsumer(
 		*consumerKey,
 		*consumerSecret,
-		/*oauth.ServiceProvider{
+		oauth.ServiceProvider{
 			RequestTokenUrl:   "http://www.fatsecret.com/oauth/request_token",
 			AuthorizeTokenUrl: "http://www.fatsecret.com/oauth/authorize",
 			AccessTokenUrl:    "http://www.fatsecret.com/oauth/access_token",
-			ParamsInURI: true, // The FatSecret API fails unless the auth params are in the Request URI
-		}*/
-		oauth.ServiceProvider{
-			RequestTokenUrl:   "http://oauthbin.com/v1/request-token",
-			AuthorizeTokenUrl: "http://oauthbin.com/v1/authorize",
-			AccessTokenUrl:    "http://oauthbin.com/v1/access_token",
 			ParamsInURI: true, // The FatSecret API fails unless the auth params are in the Request URI
 		})
 
@@ -78,5 +74,30 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Println(client)
+	url := "http://platform.fatsecret.com/rest/server.api"
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	q := req.URL.Query()
+	q.Add("method", "foods.search")
+	q.Add("format", "json")
+	q.Add("search_expression", "pizza")
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	results, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = resp.Body.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Search results:")
+	fmt.Println(string(results))
 }
