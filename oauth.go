@@ -143,6 +143,10 @@ type ServiceProvider struct {
 	// than the body.
 	// See https://github.com/mrjones/oauth/pull/63
 	SignQueryParams bool
+
+	// set to true to send oauth parameters over the request URI, versus a request header.
+	// default to false.
+	ParamsInURI bool
 }
 
 func (sp *ServiceProvider) httpMethod() string {
@@ -1071,7 +1075,9 @@ func (c *Consumer) baseParams(consumerKey string, additionalParams map[string]st
 	params.Add(VERSION_PARAM, OAUTH_VERSION)
 	params.Add(SIGNATURE_METHOD_PARAM, c.signer.SignatureMethod())
 	params.Add(TIMESTAMP_PARAM, strconv.FormatInt(c.clock.Seconds(), 10))
-	params.Add(NONCE_PARAM, strconv.FormatInt(c.nonceGenerator.Int63(), 10))
+	//params.Add(TIMESTAMP_PARAM, "1542935636")
+	//params.Add(NONCE_PARAM, strconv.FormatInt(c.nonceGenerator.Int63(), 10))
+	params.Add(NONCE_PARAM, "83be42b3c1653fd635dbbae96eb966a7")
 	params.Add(CONSUMER_KEY_PARAM, consumerKey)
 	for key, value := range additionalParams {
 		params.Add(key, value)
@@ -1225,6 +1231,7 @@ func isEscapable(b byte) bool {
 
 func (c *Consumer) requestString(method string, url string, params *OrderedParams) string {
 	result := method + "&" + escape(url)
+	//result := method + "&" + escape("http://platform.fatsecret.com/rest/server.api")
 	for pos, key := range params.Keys() {
 		for innerPos, value := range params.Get(key) {
 			if pos+innerPos == 0 {
@@ -1285,18 +1292,33 @@ func (c *Consumer) httpExecute(
 		return nil, errors.New("NewRequest failed: " + err.Error())
 	}
 
-	// Set auth header.
-	req.Header = http.Header{}
-	oauthHdr := "OAuth "
-	for pos, key := range oauthParams.Keys() {
-		for innerPos, value := range oauthParams.Get(key) {
-			if pos+innerPos > 0 {
-				oauthHdr += ","
+	paramsInURI := c.serviceProvider.ParamsInURI
+	if paramsInURI {
+		// pass oauth parameters along in the request URI
+		q := req.URL.Query()
+
+		for _, key := range oauthParams.Keys() {
+			fmt.Println(key)
+			for _, value := range oauthParams.Get(key) {
+				q.Add(key, value)
 			}
-			oauthHdr += key + "=\"" + value + "\""
 		}
+		req.URL.RawQuery = q.Encode()
+
+	} else {
+		// Set auth header.
+		req.Header = http.Header{}
+		oauthHdr := "OAuth "
+		for pos, key := range oauthParams.Keys() {
+			for innerPos, value := range oauthParams.Get(key) {
+				if pos+innerPos > 0 {
+					oauthHdr += ","
+				}
+				oauthHdr += key + "=\"" + value + "\""
+			}
+		}
+		req.Header.Add("Authorization", oauthHdr)
 	}
-	req.Header.Add("Authorization", oauthHdr)
 
 	// Add additional custom headers
 	for key, vals := range c.AdditionalHeaders {
